@@ -150,6 +150,38 @@ func containsReservedMetadata(header http.Header) bool {
 	return false
 }
 
+// Check if the bucket is on a remote site. This is similar to
+// isRemoteCallRequired, but makes the determination by comparing the globalDNS
+// entry for a bucket against the set of endpoints exposed by this server.  The
+// isRemoteCallRequired method attempts to look the bucket up locally and uses
+// the fact of a errVolumeNotFound to indicate that the bucket isn't local.
+//
+// - If the bucket is not registered in etcd this method will return the
+// dns.ErrNoEntriesFound error
+// - If the bucket is registered in etcd and is remote this method returns the
+// DNS records associated with the bucket
+// - Otherwise the nil is returned
+func getRemoteBucketDNSRecords(bucket string) (records []dns.SrvRecord, err error) {
+	if globalDNSConfig == nil {
+		return nil, nil
+	}
+
+	if bucket == "" {
+		return nil, nil
+	}
+
+	sr, err := globalDNSConfig.Get(bucket)
+	if err != nil {
+		return sr, err
+	}
+
+	if globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(sr)...)).IsEmpty() {
+		return sr, nil
+	}
+
+	return nil, nil
+}
+
 // Reserved bucket.
 const (
 	minioReservedBucket     = "minio"
@@ -673,22 +705,20 @@ func (f bucketForwardingHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		if bucket != "" {
-			sr, err := globalDNSConfig.Get(bucket)
-			if err != nil {
-				if err == dns.ErrNoEntriesFound {
-					writeErrorResponse(context.Background(), w, errorCodes.ToAPIErr(ErrNoSuchBucket), r.URL, guessIsBrowserReq(r))
-				} else {
-					writeErrorResponse(context.Background(), w, toAPIError(context.Background(), err), r.URL, guessIsBrowserReq(r))
-				}
-				return
-			}
-			if globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(sr)...)).IsEmpty() {
+			if sr, err := getRemoteBucketDNSRecords(bucket); sr != nil {
 				r.URL.Scheme = "http"
 				if globalIsSSL {
 					r.URL.Scheme = "https"
 				}
 				r.URL.Host = getHostFromSrv(sr)
 				f.fwd.ServeHTTP(w, r)
+				return
+			} else if err != nil {
+				if err == dns.ErrNoEntriesFound {
+					writeErrorResponse(context.Background(), w, errorCodes.ToAPIErr(ErrNoSuchBucket), r.URL, guessIsBrowserReq(r))
+				} else {
+					writeErrorResponse(context.Background(), w, toAPIError(context.Background(), err), r.URL, guessIsBrowserReq(r))
+				}
 				return
 			}
 		}
@@ -718,22 +748,21 @@ func (f bucketForwardingHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		f.handler.ServeHTTP(w, r)
 		return
 	}
-	sr, err := globalDNSConfig.Get(bucket)
-	if err != nil {
-		if err == dns.ErrNoEntriesFound {
-			writeErrorResponse(context.Background(), w, errorCodes.ToAPIErr(ErrNoSuchBucket), r.URL, guessIsBrowserReq(r))
-		} else {
-			writeErrorResponse(context.Background(), w, toAPIError(context.Background(), err), r.URL, guessIsBrowserReq(r))
-		}
-		return
-	}
-	if globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(sr)...)).IsEmpty() {
+
+	if sr, err := getRemoteBucketDNSRecords(bucket); sr != nil {
 		r.URL.Scheme = "http"
 		if globalIsSSL {
 			r.URL.Scheme = "https"
 		}
 		r.URL.Host = getHostFromSrv(sr)
 		f.fwd.ServeHTTP(w, r)
+		return
+	} else if err != nil {
+		if err == dns.ErrNoEntriesFound {
+			writeErrorResponse(context.Background(), w, errorCodes.ToAPIErr(ErrNoSuchBucket), r.URL, guessIsBrowserReq(r))
+		} else {
+			writeErrorResponse(context.Background(), w, toAPIError(context.Background(), err), r.URL, guessIsBrowserReq(r))
+		}
 		return
 	}
 	f.handler.ServeHTTP(w, r)

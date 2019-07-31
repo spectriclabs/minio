@@ -60,17 +60,16 @@ func initFederatorBackend(objLayer ObjectLayer) {
 	for index := range b {
 		index := index
 		g.Go(func() error {
-			r, gerr := globalDNSConfig.Get(b[index].Name)
-			if gerr != nil {
+			if sr, gerr := getRemoteBucketDNSRecords(b[index].Name); sr != nil {
+				// There is already an entry for this bucket, with all IP addresses different. This indicates a bucket name collision. Log an error and continue.
+				return fmt.Errorf("Unable to add bucket DNS entry for bucket %s, an entry exists for the same bucket. Use one of these IP addresses %v to access the bucket", b[index].Name, globalDomainIPs.ToSlice())
+			} else if gerr != nil {
 				if gerr == dns.ErrNoEntriesFound {
 					return globalDNSConfig.Put(b[index].Name)
 				}
 				return gerr
 			}
-			if globalDomainIPs.Intersection(set.CreateStringSet(getHostsSlice(r)...)).IsEmpty() {
-				// There is already an entry for this bucket, with all IP addresses different. This indicates a bucket name collision. Log an error and continue.
-				return fmt.Errorf("Unable to add bucket DNS entry for bucket %s, an entry exists for the same bucket. Use one of these IP addresses %v to access the bucket", b[index].Name, globalDomainIPs.ToSlice())
-			}
+
 			return nil
 		}, index)
 	}
