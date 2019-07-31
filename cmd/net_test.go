@@ -135,6 +135,11 @@ func TestGetHostIP(t *testing.T) {
 	}{
 		{"localhost", set.CreateStringSet("127.0.0.1"), nil},
 		{"example.org", set.CreateStringSet("93.184.216.34"), nil},
+		{"10.0.0.1", set.CreateStringSet("10.0.0.1"), nil},
+		{"::FFFF:0A00:0001", set.CreateStringSet("10.0.0.1"), nil},
+		{"[::FFFF:0A00:0001]", set.CreateStringSet("10.0.0.1"), nil},
+		{"::2001:4860:4860:8888", set.CreateStringSet("::2001:4860:4860:8888"), nil},
+		{"[::2001:4860:4860:8888]", set.CreateStringSet("::2001:4860:4860:8888"), nil},
 	}
 
 	for _, testCase := range testCases {
@@ -151,6 +156,46 @@ func TestGetHostIP(t *testing.T) {
 
 		if testCase.expectedIPList != nil && testCase.expectedIPList.Intersection(ipList).IsEmpty() {
 			t.Fatalf("host: expected = %v, got = %v", testCase.expectedIPList, ipList)
+		}
+	}
+}
+
+func TestIsIpv4FormattedAddress(t *testing.T) {
+	testCases := []struct {
+		host           string
+		expectedResult bool
+	}{
+		{"10.0.0.1", true},
+		{"10.0.0.1:9000", true},
+		{"::FFFF:0A00:0001", false},
+		{"[::FFFF:0A00:0001]", false},
+		{"[::FFFF:0A00:0001]:9000", false},
+	}
+
+	for _, testCase := range testCases {
+		result := IsIPv4FormattedAddress(testCase.host)
+		if testCase.expectedResult != result {
+			t.Fatalf("error: for %s expected = %v, got = %v", testCase.host, testCase.expectedResult, result)
+		}
+	}
+}
+
+func TestIsIpv6FormattedAddress(t *testing.T) {
+	testCases := []struct {
+		host           string
+		expectedResult bool
+	}{
+		{"10.0.0.1", false},
+		{"10.0.0.1:9000", false},
+		{"::FFFF:0A00:0001", true},
+		{"[::FFFF:0A00:0001]", true},
+		{"[::FFFF:0A00:0001]:9000", true},
+	}
+
+	for _, testCase := range testCases {
+		result := IsIPv6FormattedAddress(testCase.host)
+		if testCase.expectedResult != result {
+			t.Fatalf("error: for %s expected = %v, got = %v", testCase.host, testCase.expectedResult, result)
 		}
 	}
 }

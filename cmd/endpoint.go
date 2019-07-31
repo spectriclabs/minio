@@ -720,6 +720,10 @@ func GetRemotePeers(endpoints EndpointList) []string {
 func updateDomainIPs(endPoints set.StringSet) {
 	ipList := set.NewStringSet()
 	for e := range endPoints {
+		// net.SplitHostPort requires that IPv6 address are in brackets
+		if IsIPv6FormattedAddress(e) && !strings.HasPrefix(e, "[") {
+			e = "[" + e + "]"
+		}
 		host, port, err := net.SplitHostPort(e)
 		if err != nil {
 			if strings.Contains(err.Error(), "missing port in address") {

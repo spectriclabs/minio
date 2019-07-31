@@ -19,6 +19,7 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"reflect"
 	"strings"
@@ -483,5 +484,49 @@ func TestUpdateDomainIPs(t *testing.T) {
 		if !testCase.expectedResult.Equals(globalDomainIPs) {
 			t.Fatalf("error: expected = %s, got = %s", testCase.expectedResult, globalDomainIPs)
 		}
+	}
+
+	ipv6TestCases := []struct {
+		endPoints      set.StringSet
+		expectedResult set.StringSet
+	}{
+		{set.CreateStringSet("::1"), set.NewStringSet()},
+		{set.CreateStringSet("[::1]"), set.NewStringSet()},
+		{
+			set.CreateStringSet("::FFFF:0A00:0001", "[::FFFF:0A00:0002]"),
+			set.CreateStringSet("10.0.0.1:9000", "10.0.0.2:9000"),
+		},
+		{
+			set.CreateStringSet("::2001:4860:4860:8888", "[::2001:4860:4860:8844]"),
+			set.CreateStringSet("[::2001:4860:4860:8888]:9000", "[::2001:4860:4860:8844]:9000"),
+		},
+		{
+			set.CreateStringSet("[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]"),
+			set.CreateStringSet("[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]:9000"),
+		},
+		{
+			set.CreateStringSet("[::2001:4860:4860:8888]", "[::2001:4860:4860:8844]:9002"),
+			set.CreateStringSet("[::2001:4860:4860:8888]:9000", "[::2001:4860:4860:8844]:9002"),
+		},
+		{
+			set.CreateStringSet("[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]:9002"),
+			set.CreateStringSet("[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]:9002"),
+		},
+	}
+
+	// Just in case we don't have Ipv6 check that net.LookupIP
+	// succeeds
+	if _, err := net.LookupIP("::2001:4860:4860:8888"); err == nil {
+		for _, testCase := range ipv6TestCases {
+			globalDomainIPs = nil
+
+			updateDomainIPs(testCase.endPoints)
+
+			if !testCase.expectedResult.Equals(globalDomainIPs) {
+				t.Fatalf("error: expected = %s, got = %s", testCase.expectedResult, globalDomainIPs)
+			}
+		}
+	} else {
+		t.Fatalf("skipping IPv6 tests")
 	}
 }

@@ -37,6 +37,61 @@ var localIP4 = mustGetLocalIP4()
 // IPv6 address of local host.
 var localIP6 = mustGetLocalIP6()
 
+// IsIPv4FormattedAddress - check if address (with optional port)
+// is represented in IPv4 format
+func IsIPv4FormattedAddress(address string) bool {
+	if strings.Count(address, ":") > 1 {
+		return false
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		if strings.Contains(err.Error(), "missing port in address") {
+			host = address
+		}
+	}
+
+	ip := net.ParseIP(host)
+	if ip != nil && ip.To4() != nil {
+		return true
+	}
+
+	return false
+}
+
+// IsIPv6FormattedAddress - check if address (with optional port)
+// is represented in IPv6 format
+func IsIPv6FormattedAddress(address string) bool {
+	if strings.Count(address, ":") < 2 {
+		return false
+	}
+
+	if !strings.HasPrefix(address, "[") {
+		address = "[" + address + "]"
+	}
+
+	// SplitHostPort requires IPv6 addresses include brackets
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		if strings.Contains(err.Error(), "missing port in address") {
+			host = address
+		}
+	}
+
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+
+	// because we forced address to have at least 2 colons in it above
+	// if the address parses and To16() succeeds we know this is an IPv16
+	// formatted address
+	ip := net.ParseIP(host)
+	if ip != nil && ip.To16() != nil {
+		return true
+	}
+
+	return false
+}
+
 // mustSplitHostPort is a wrapper to net.SplitHostPort() where error is assumed to be a fatal.
 func mustSplitHostPort(hostPort string) (host, port string) {
 	host, port, err := net.SplitHostPort(hostPort)
@@ -98,6 +153,10 @@ func mustGetLocalIP6() (ipList set.StringSet) {
 func getHostIP(host string) (ipList set.StringSet, err error) {
 	var ips []net.IP
 
+	// net.LookupIP requires IPv6 not include brackets
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
 	if ips, err = net.LookupIP(host); err != nil {
 		return ipList, err
 	}
