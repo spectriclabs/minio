@@ -310,7 +310,7 @@ func handleCommonEnvVars() {
 	} else {
 		// Add found interfaces IP address to global domain IPS,
 		// loopback addresses will be naturally dropped.
-		updateDomainIPs(localIP4)
+		updateDomainIPs(localIP4, localIP6)
 	}
 
 	if len(globalDomainNames) != 0 && !globalDomainIPs.IsEmpty() && globalEtcdClient != nil {

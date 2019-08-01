@@ -717,32 +717,34 @@ func GetRemotePeers(endpoints EndpointList) []string {
 	return peerSet.ToSlice()
 }
 
-func updateDomainIPs(endPoints set.StringSet) {
+func updateDomainIPs(endPointsSets ...set.StringSet) {
 	ipList := set.NewStringSet()
-	for e := range endPoints {
-		// net.SplitHostPort requires that IPv6 address are in brackets
-		if IsIPv6FormattedAddress(e) && !strings.HasPrefix(e, "[") {
-			e = "[" + e + "]"
-		}
-		host, port, err := net.SplitHostPort(e)
-		if err != nil {
-			if strings.Contains(err.Error(), "missing port in address") {
-				host = e
-				port = globalMinioPort
-			} else {
+	for _, endPoints := range endPointsSets {
+		for e := range endPoints {
+			// net.SplitHostPort requires that IPv6 address are in brackets
+			if IsIPv6FormattedAddress(e) && !strings.HasPrefix(e, "[") {
+				e = "[" + e + "]"
+			}
+			host, port, err := net.SplitHostPort(e)
+			if err != nil {
+				if strings.Contains(err.Error(), "missing port in address") {
+					host = e
+					port = globalMinioPort
+				} else {
+					continue
+				}
+			}
+			IPs, err := getHostIP(host)
+			if err != nil {
 				continue
 			}
-		}
-		IPs, err := getHostIP(host)
-		if err != nil {
-			continue
-		}
 
-		IPsWithPort := IPs.ApplyFunc(func(ip string) string {
-			return net.JoinHostPort(ip, port)
-		})
+			IPsWithPort := IPs.ApplyFunc(func(ip string) string {
+				return net.JoinHostPort(ip, port)
+			})
 
-		ipList = ipList.Union(IPsWithPort)
+			ipList = ipList.Union(IPsWithPort)
+		}
 	}
 	globalDomainIPs = ipList.FuncMatch(func(ip string, matchString string) bool {
 		return !(strings.HasPrefix(ip, "127.") || strings.HasPrefix(ip, "::1") || strings.HasPrefix(ip, "[::1]"))

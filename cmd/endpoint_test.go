@@ -529,4 +529,16 @@ func TestUpdateDomainIPs(t *testing.T) {
 	} else {
 		t.Fatalf("skipping IPv6 tests")
 	}
+
+	// Test that we can pass multiple endpoint lists
+	endPointSetA := set.CreateStringSet("10.0.0.1:9001", "10.0.0.2")
+	endPointSetB := set.CreateStringSet("[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]")
+	expectedResult := set.CreateStringSet("10.0.0.1:9001", "10.0.0.2:9000", "[::2001:4860:4860:8888]:9001", "[::2001:4860:4860:8844]:9000")
+
+	globalDomainIPs = nil
+	updateDomainIPs(endPointSetA, endPointSetB)
+	if !expectedResult.Equals(globalDomainIPs) {
+		t.Fatalf("error: expected = %s, got = %s", expectedResult, globalDomainIPs)
+	}
+
 }
